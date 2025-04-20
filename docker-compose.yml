@@ -1,0 +1,48 @@
+version: '3.8'
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: auth-service-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: 8298
+      MYSQL_DATABASE: authdb
+      MYSQL_USER: root
+      MYSQL_PASSWORD: 8298
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    networks:
+      - auth-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-ppassword"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  auth-service:
+    build: .
+    container_name: auth-service
+    depends_on:
+      mysql:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:mysql://mysql:3306/authdb
+      - SPRING_DATASOURCE_USERNAME=user
+      - SPRING_DATASOURCE_PASSWORD=password
+      - SPRING_JPA_HIBERNATE_DDL_AUTO=update
+      - JWT_SECRET=d63a385c672d1bfdd8084d4deccdcab94d2ad4e306dd34e0adc702d8a3a8c8c460107347bfc90c9c9b1516d589a48fec0c644d14aebfc80b0b1ca39b70d9da6b51723645748851e704faef3f7f5c436308aab23e76743459e50286d0bd15d3a55b3493076de42978ae58b1b43370382f4f259bad4b01d3b168c986f7ffc5f570
+      - JWT_EXPIRATION=86400000
+    networks:
+      - auth-network
+    restart: unless-stopped
+
+volumes:
+  mysql-data:
+
+networks:
+  auth-network:
+    driver: bridge
