@@ -1,6 +1,12 @@
 package com.example.authservice.dto.response;
 
+import lombok.Getter;
+import lombok.Setter;
+
+@Setter
+@Getter
 public class MessageResponse {
+    // Getter and setter
     private String message;
 
     // Default constructor
@@ -12,12 +18,4 @@ public class MessageResponse {
         this.message = message;
     }
 
-    // Getter and setter
-    public String getMessage() {
-        return message;
-    }
-
-    public void setMessage(String message) {
-        this.message = message;
-    }
 }
