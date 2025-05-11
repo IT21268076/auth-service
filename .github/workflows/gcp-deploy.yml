@@ -11,7 +11,6 @@ env:
   GKE_CLUSTER: auth-service-cluster
   GKE_ZONE: us-central1-a
   IMAGE: auth-service
-  REGION: us # Change this to the appropriate region
 
 jobs:
   build-test-deploy:
@@ -43,14 +42,8 @@ jobs:
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v1
 
-      - name: Enable APIs
-        run: |
-          gcloud services enable artifactregistry.googleapis.com
-          gcloud services enable containerregistry.googleapis.com
-
-      - name: Configure Docker for Artifact Registry
-        run: |
-          gcloud auth configure-docker gcr.io
+      - name: Configure Docker
+        run: gcloud auth configure-docker
 
       - name: Build and Push Docker Image
         run: |
