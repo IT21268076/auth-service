@@ -7,8 +7,8 @@ services:
     environment:
       MYSQL_ROOT_PASSWORD: 8298
       MYSQL_DATABASE: authdb
-      MYSQL_USER: root
-      MYSQL_PASSWORD: 8298
+      MYSQL_USER: admin       # Changed from 'root' to 'admin'
+      MYSQL_PASSWORD: password  # Changed to match your Kubernetes setup
     ports:
       - "3306:3306"
     volumes:
@@ -16,10 +16,11 @@ services:
     networks:
       - auth-network
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-ppassword"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p8298"]  # Fixed password here
       interval: 10s
       timeout: 5s
       retries: 5
+    command: --default-authentication-plugin=mysql_native_password  # Added for compatibility
 
   auth-service:
     build: .
@@ -30,15 +31,29 @@ services:
     ports:
       - "8080:8080"
     environment:
-      - SPRING_DATASOURCE_URL=jdbc:mysql://mysql:3306/authdb
-      - SPRING_DATASOURCE_USERNAME=user
+      # Activate production profile
+      - SPRING_PROFILES_ACTIVE=prod
+      # Database connection with fix for the public key retrieval issue
+      - SPRING_DATASOURCE_URL=jdbc:mysql://mysql:3306/authdb?useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true
+      - SPRING_DATASOURCE_USERNAME=admin  # Changed to match MySQL service
       - SPRING_DATASOURCE_PASSWORD=password
+      # Not needed if using application-prod.yml, but kept for clarity
       - SPRING_JPA_HIBERNATE_DDL_AUTO=update
       - JWT_SECRET=d63a385c672d1bfdd8084d4deccdcab94d2ad4e306dd34e0adc702d8a3a8c8c460107347bfc90c9c9b1516d589a48fec0c644d14aebfc80b0b1ca39b70d9da6b51723645748851e704faef3f7f5c436308aab23e76743459e50286d0bd15d3a55b3493076de42978ae58b1b43370382f4f259bad4b01d3b168c986f7ffc5f570
       - JWT_EXPIRATION=86400000
+      # Added for better logs in containerized environment
+      - LOGGING_LEVEL_ROOT=INFO
+      - LOGGING_LEVEL_COM_EXAMPLE_AUTHSERVICE=INFO
     networks:
       - auth-network
     restart: unless-stopped
+    # Added healthcheck for the auth service
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/test/all"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s  # Give it time to start up
 
 volumes:
   mysql-data:

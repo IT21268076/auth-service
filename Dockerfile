@@ -33,6 +33,8 @@ COPY --from=build ${DEPENDENCY}/BOOT-INF/classes /app
 
 # Set environment variables
 ENV SERVER_PORT=8080
+# Set environment variable
+ENV SPRING_PROFILES_ACTIVE=prod
 
 # Set security options
 RUN addgroup -S spring && adduser -S spring -G spring
