@@ -66,5 +66,193 @@ jobs:
 
       - name: Deploy to GKE
         run: |
-          kubectl set image deployment/auth-service auth-service=gcr.io/$PROJECT_ID/$IMAGE:$GITHUB_SHA
-          kubectl rollout status deployment/auth-service
+          # Check if the deployment exists
+          if kubectl get deployment auth-service &> /dev/null; then
+            echo "Updating existing deployment..."
+            kubectl set image deployment/auth-service auth-service=gcr.io/$PROJECT_ID/$IMAGE:$GITHUB_SHA
+          else
+            echo "Creating new deployment..."
+            # Create MySQL resources first
+            cat > kubernetes/mysql.yaml << EOF
+            apiVersion: v1
+            kind: Secret
+            metadata:
+              name: mysql-credentials
+            type: Opaque
+            data:
+              username: YWRtaW4=  # "admin" in base64
+              password: cGFzc3dvcmQ=  # "password" in base64
+            ---
+            apiVersion: v1
+            kind: Secret
+            metadata:
+              name: jwt-secret
+            type: Opaque
+            data:
+              secret: ZDYzYTM4NWM2NzJkMWJmZGQ4MDg0ZDRkZWNjZGNhYjk0ZDJhZDRlMzA2ZGQzNGUwYWRjNzAyZDhhM2E4YzhjNDYwMTA3MzQ3YmZjOTBjOWM5YjE1MTZkNTg5YTQ4ZmVjMGM2NDRkMTRhZWJmYzgwYjBiMWNhMzliNzBkOWRhNmI1MTcyMzY0NTc0ODg1MWU3MDRmYWVmM2Y3ZjVjNDM2MzA4YWFiMjNlNzY3NDM0NTllNTAyODZkMGJkMTVkM2E1NWIzNDkzMDc2ZGU0Mjk3OGFlNThiMWI0MzM3MDM4MmY0ZjI1OWJhZDRiMDFkM2IxNjhjOTg2ZjdmZmM1ZjU3MA==
+            ---
+            apiVersion: v1
+            kind: PersistentVolumeClaim
+            metadata:
+              name: mysql-pvc
+            spec:
+              accessModes:
+                - ReadWriteOnce
+              resources:
+                requests:
+                  storage: 5Gi
+            ---
+            apiVersion: apps/v1
+            kind: Deployment
+            metadata:
+              name: mysql
+            spec:
+              selector:
+                matchLabels:
+                  app: mysql
+              template:
+                metadata:
+                  labels:
+                    app: mysql
+                spec:
+                  containers:
+                    - name: mysql
+                      image: mysql:8.0
+                      args:
+                        - --default-authentication-plugin=mysql_native_password
+                      ports:
+                        - containerPort: 3306
+                      env:
+                        - name: MYSQL_DATABASE
+                          value: "authdb"
+                        - name: MYSQL_ROOT_PASSWORD
+                          valueFrom:
+                            secretKeyRef:
+                              name: mysql-credentials
+                              key: password
+                        - name: MYSQL_USER
+                          valueFrom:
+                            secretKeyRef:
+                              name: mysql-credentials
+                              key: username
+                        - name: MYSQL_PASSWORD
+                          valueFrom:
+                            secretKeyRef:
+                              name: mysql-credentials
+                              key: password
+                      volumeMounts:
+                        - name: mysql-storage
+                          mountPath: /var/lib/mysql
+                  volumes:
+                    - name: mysql-storage
+                      persistentVolumeClaim:
+                        claimName: mysql-pvc
+            ---
+            apiVersion: v1
+            kind: Service
+            metadata:
+              name: mysql
+            spec:
+              selector:
+                app: mysql
+              ports:
+                - port: 3306
+              clusterIP: None  # Headless service for MySQL
+            EOF
+
+            # Create auth-service deployment
+            cat > kubernetes/deployment.yaml << EOF
+            apiVersion: apps/v1
+            kind: Deployment
+            metadata:
+              name: auth-service
+            spec:
+              replicas: 1
+              selector:
+                matchLabels:
+                  app: auth-service
+              template:
+                metadata:
+                  labels:
+                    app: auth-service
+                spec:
+                  containers:
+                    - name: auth-service
+                      image: gcr.io/$PROJECT_ID/$IMAGE:$GITHUB_SHA
+                      ports:
+                        - containerPort: 8080
+                      env:
+                        - name: SPRING_PROFILES_ACTIVE
+                          value: "prod"
+                        - name: SPRING_DATASOURCE_URL
+                          value: "jdbc:mysql://mysql:3306/authdb?useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true"
+                        - name: SPRING_DATASOURCE_USERNAME
+                          valueFrom:
+                            secretKeyRef:
+                              name: mysql-credentials
+                              key: username
+                        - name: SPRING_DATASOURCE_PASSWORD
+                          valueFrom:
+                            secretKeyRef:
+                              name: mysql-credentials
+                              key: password
+                        - name: JWT_SECRET
+                          valueFrom:
+                            secretKeyRef:
+                              name: jwt-secret
+                              key: secret
+                      resources:
+                        limits:
+                          cpu: "0.5"
+                          memory: "512Mi"
+                        requests:
+                          cpu: "0.2"
+                          memory: "256Mi"
+                      readinessProbe:
+                        httpGet:
+                          path: /api/test/all
+                          port: 8080
+                        initialDelaySeconds: 120
+                        periodSeconds: 15
+                        timeoutSeconds: 5
+                        failureThreshold: 5
+                      livenessProbe:
+                        httpGet:
+                          path: /api/test/all
+                          port: 8080
+                        initialDelaySeconds: 180
+                        periodSeconds: 30
+                        timeoutSeconds: 5
+                        failureThreshold: 3
+            EOF
+
+            # Create auth-service service
+            cat > kubernetes/service.yaml << EOF
+            apiVersion: v1
+            kind: Service
+            metadata:
+              name: auth-service
+            spec:
+              selector:
+                app: auth-service
+              ports:
+                - port: 80
+                  targetPort: 8080
+              type: LoadBalancer
+            EOF
+
+            # Apply all the configurations
+            kubectl apply -f kubernetes/mysql.yaml
+            echo "Waiting for MySQL to initialize..."
+            sleep 30  # Give MySQL some time to initialize
+            kubectl apply -f kubernetes/deployment.yaml
+            kubectl apply -f kubernetes/service.yaml
+          fi
+
+          # Wait for the deployment to be ready
+          echo "Waiting for deployment to be ready..."
+          kubectl rollout status deployment/auth-service --timeout=10m
+
+          # Get the service URL
+          echo "Service is available at:"
+          kubectl get service auth-service
