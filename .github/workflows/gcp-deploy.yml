@@ -57,7 +57,7 @@ jobs:
             gcr.io/${{ env.PROJECT_ID }}/${{ env.IMAGE }}:${{ github.sha }}
             gcr.io/${{ env.PROJECT_ID }}/${{ env.IMAGE }}:latest
 
-      - name: Set up GKE credentials
+      - name: Set up GKE credential
         uses: google-github-actions/get-gke-credentials@v1
         with:
           cluster_name: ${{ env.GKE_CLUSTER }}
