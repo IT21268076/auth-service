@@ -72,8 +72,11 @@ jobs:
             kubectl set image deployment/auth-service auth-service=gcr.io/$PROJECT_ID/$IMAGE:$GITHUB_SHA
           else
             echo "Creating new deployment..."
+            # Create kubernetes directory if it doesn't exist
+            mkdir -p kubernetes
+
             # Create MySQL resources first
-            cat > kubernetes/mysql.yaml << EOF
+            cat > kubernetes/mysql.yaml << 'EOFMYSQL'
             apiVersion: v1
             kind: Secret
             metadata:
@@ -158,10 +161,10 @@ jobs:
               ports:
                 - port: 3306
               clusterIP: None  # Headless service for MySQL
-            EOF
+            EOFMYSQL
 
             # Create auth-service deployment
-            cat > kubernetes/deployment.yaml << EOF
+            cat > kubernetes/deployment.yaml << 'EOFDEPLOY'
             apiVersion: apps/v1
             kind: Deployment
             metadata:
@@ -178,7 +181,7 @@ jobs:
                 spec:
                   containers:
                     - name: auth-service
-                      image: gcr.io/$PROJECT_ID/$IMAGE:$GITHUB_SHA
+                      image: gcr.io/PROJECT_ID/IMAGE:TAG
                       ports:
                         - containerPort: 8080
                       env:
@@ -224,10 +227,13 @@ jobs:
                         periodSeconds: 30
                         timeoutSeconds: 5
                         failureThreshold: 3
-            EOF
+            EOFDEPLOY
+
+            # Replace placeholder values with actual values
+            sed -i "s|gcr.io/PROJECT_ID/IMAGE:TAG|gcr.io/$PROJECT_ID/$IMAGE:$GITHUB_SHA|g" kubernetes/deployment.yaml
 
             # Create auth-service service
-            cat > kubernetes/service.yaml << EOF
+            cat > kubernetes/service.yaml << 'EOFSERVICE'
             apiVersion: v1
             kind: Service
             metadata:
@@ -239,7 +245,7 @@ jobs:
                 - port: 80
                   targetPort: 8080
               type: LoadBalancer
-            EOF
+            EOFSERVICE
 
             # Apply all the configurations
             kubectl apply -f kubernetes/mysql.yaml
