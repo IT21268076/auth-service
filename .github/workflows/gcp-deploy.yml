@@ -11,6 +11,7 @@ env:
   GKE_CLUSTER: auth-service-cluster
   GKE_ZONE: us-central1-a
   IMAGE: auth-service
+  REGION: us # Change this to the appropriate region
 
 jobs:
   build-test-deploy:
@@ -28,15 +29,11 @@ jobs:
           distribution: 'temurin'
           cache: maven
 
-      # Add this step to fix permission issue
       - name: Make Maven wrapper executable
         run: chmod +x ./mvnw
 
       - name: Build with Maven
         run: ./mvnw clean package -DskipTests
-
-#      - name: Run tests
-#        run: ./mvnw test
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v1
@@ -46,9 +43,17 @@ jobs:
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v1
 
+      - name: Enable APIs
+        run: |
+          gcloud services enable artifactregistry.googleapis.com
+          gcloud services enable containerregistry.googleapis.com
+
+      - name: Configure Docker for Artifact Registry
+        run: |
+          gcloud auth configure-docker gcr.io
+
       - name: Build and Push Docker Image
         run: |
-          gcloud auth configure-docker
           docker build -t gcr.io/$PROJECT_ID/$IMAGE:$GITHUB_SHA .
           docker push gcr.io/$PROJECT_ID/$IMAGE:$GITHUB_SHA
           docker tag gcr.io/$PROJECT_ID/$IMAGE:$GITHUB_SHA gcr.io/$PROJECT_ID/$IMAGE:latest
