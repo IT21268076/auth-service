@@ -132,73 +132,70 @@ jobs:
           if kubectl get deployment auth-service &> /dev/null; then
             echo "Updating existing deployment..."
           
-            # Create a new deployment manifest without health checks
-            cat <<EOF > deployment.yaml
-            apiVersion: apps/v1
-            kind: Deployment
-            metadata:
-              name: auth-service
-            spec:
-              replicas: 1
-              selector:
-                matchLabels:
+            # Apply the deployment directly with kubectl
+            kubectl apply -f - <<EOF
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: auth-service
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app: auth-service
+            strategy:
+              type: RollingUpdate
+              rollingUpdate:
+                maxSurge: 1
+                maxUnavailable: 0
+            template:
+              metadata:
+                labels:
                   app: auth-service
-              strategy:
-                type: RollingUpdate
-                rollingUpdate:
-                  maxSurge: 1
-                  maxUnavailable: 0
-              template:
-                metadata:
-                  labels:
-                    app: auth-service
-                spec:
-                  containers:
-                    - name: auth-service
-                      image: gcr.io/$PROJECT_ID/$IMAGE:$GITHUB_SHA
-                      ports:
-                        - containerPort: 8080
-                      env:
-                        - name: SPRING_PROFILES_ACTIVE
-                          value: "prod"
-                        - name: SPRING_DATASOURCE_URL
-                          value: "jdbc:mysql://mysql:3306/authdb?useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true&connectTimeout=10000&socketTimeout=10000"
-                        - name: SPRING_DATASOURCE_USERNAME
-                          valueFrom:
-                            secretKeyRef:
-                              name: mysql-credentials
-                              key: username
-                        - name: SPRING_DATASOURCE_PASSWORD
-                          valueFrom:
-                            secretKeyRef:
-                              name: mysql-credentials
-                              key: password
-                        - name: JWT_SECRET
-                          valueFrom:
-                            secretKeyRef:
-                              name: jwt-secret
-                              key: secret
-                        - name: SPRING_JPA_HIBERNATE_DDL_AUTO
-                          value: "update"
-                        - name: SPRING_JPA_SHOW_SQL
-                          value: "false"
-                        - name: SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE
-                          value: "2"
-                        - name: SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE
-                          value: "5"
-                        - name: SPRING_DATASOURCE_HIKARI_CONNECTION_TIMEOUT
-                          value: "10000"
-                      resources:
-                        limits:
-                          cpu: "0.5"
-                          memory: "512Mi"
-                        requests:
-                          cpu: "0.2"
-                          memory: "256Mi"
-            EOF
-          
-            # Apply the complete new deployment
-            kubectl apply -f deployment.yaml
+              spec:
+                containers:
+                  - name: auth-service
+                    image: gcr.io/$PROJECT_ID/$IMAGE:$GITHUB_SHA
+                    ports:
+                      - containerPort: 8080
+                    env:
+                      - name: SPRING_PROFILES_ACTIVE
+                        value: "prod"
+                      - name: SPRING_DATASOURCE_URL
+                        value: "jdbc:mysql://mysql:3306/authdb?useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true&connectTimeout=10000&socketTimeout=10000"
+                      - name: SPRING_DATASOURCE_USERNAME
+                        valueFrom:
+                          secretKeyRef:
+                            name: mysql-credentials
+                            key: username
+                      - name: SPRING_DATASOURCE_PASSWORD
+                        valueFrom:
+                          secretKeyRef:
+                            name: mysql-credentials
+                            key: password
+                      - name: JWT_SECRET
+                        valueFrom:
+                          secretKeyRef:
+                            name: jwt-secret
+                            key: secret
+                      - name: SPRING_JPA_HIBERNATE_DDL_AUTO
+                        value: "update"
+                      - name: SPRING_JPA_SHOW_SQL
+                        value: "false"
+                      - name: SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE
+                        value: "2"
+                      - name: SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE
+                        value: "5"
+                      - name: SPRING_DATASOURCE_HIKARI_CONNECTION_TIMEOUT
+                        value: "10000"
+                    resources:
+                      limits:
+                        cpu: "0.5"
+                        memory: "512Mi"
+                      requests:
+                        cpu: "0.2"
+                        memory: "256Mi"
+          EOF
           
             # Check the rollout status
             echo "Checking rollout status..."
