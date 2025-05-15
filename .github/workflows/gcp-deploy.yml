@@ -77,28 +77,21 @@ jobs:
 
             # Create MySQL secret
             echo "Creating MySQL secret..."
-            echo "apiVersion: v1
-            kind: Secret
-            metadata:
-              name: mysql-credentials
-            type: Opaque
-            data:
-              username: YWRtaW4=  # admin in base64
-              password: cGFzc3dvcmQ=  # password in base64" > kubernetes/mysql-secret.yaml
+            kubectl create secret generic mysql-credentials \
+              --from-literal=username=admin \
+              --from-literal=password=password \
+              --dry-run=client -o yaml > kubernetes/mysql-secret.yaml
 
             # Create JWT secret
             echo "Creating JWT secret..."
-            echo "apiVersion: v1
-            kind: Secret
-            metadata:
-              name: jwt-secret
-            type: Opaque
-            data:
-              secret: ZDYzYTM4NWM2NzJkMWJmZGQ4MDg0ZDRkZWNjZGNhYjk0ZDJhZDRlMzA2ZGQzNGUwYWRjNzAyZDhhM2E4YzhjNDYwMTA3MzQ3YmZjOTBjOWM5YjE1MTZkNTg5YTQ4ZmVjMGM2NDRkMTRhZWJmYzgwYjBiMWNhMzliNzBkOWRhNmI1MTcyMzY0NTc0ODg1MWU3MDRmYWVmM2Y3ZjVjNDM2MzA4YWFiMjNlNzY3NDM0NTllNTAyODZkMGJkMTVkM2E1NWIzNDkzMDc2ZGU0Mjk3OGFlNThiMWI0MzM3MDM4MmY0ZjI1OWJhZDRiMDFkM2IxNjhjOTg2ZjdmZmM1ZjU3MA==" > kubernetes/jwt-secret.yaml
+            kubectl create secret generic jwt-secret \
+              --from-literal=secret="d63a385c672d1bfdd8084d4deccdcab94d2ad4e306dd34e0adc702d8a3a8c8c460107347bfc90c9c9b1516d589a48fec0c644d14aebfc80b0b1ca39b70d9da6b51723645748851e704faef3f7f5c436308aab23e76743459e50286d0bd15d3a55b3493076de42978ae58b1b43370382f4f259bad4b01d3b168c986f7ffc5f570" \
+              --dry-run=client -o yaml > kubernetes/jwt-secret.yaml
 
-            # Create MySQL PVC
+            # Create MySQL PVC using kubectl
             echo "Creating MySQL PVC..."
-            echo "apiVersion: v1
+            kubectl create -f - <<EOF
+            apiVersion: v1
             kind: PersistentVolumeClaim
             metadata:
               name: mysql-pvc
@@ -107,11 +100,13 @@ jobs:
                 - ReadWriteOnce
               resources:
                 requests:
-                  storage: 5Gi" > kubernetes/mysql-pvc.yaml
+                  storage: 5Gi
+            EOF
 
             # Create MySQL deployment
             echo "Creating MySQL deployment..."
-            echo "apiVersion: apps/v1
+            kubectl create -f - <<EOF
+            apiVersion: apps/v1
             kind: Deployment
             metadata:
               name: mysql
@@ -133,7 +128,7 @@ jobs:
                         - containerPort: 3306
                       env:
                         - name: MYSQL_DATABASE
-                          value: \"authdb\"
+                          value: "authdb"
                         - name: MYSQL_ROOT_PASSWORD
                           valueFrom:
                             secretKeyRef:
@@ -155,11 +150,13 @@ jobs:
                   volumes:
                     - name: mysql-storage
                       persistentVolumeClaim:
-                        claimName: mysql-pvc" > kubernetes/mysql-deployment.yaml
+                        claimName: mysql-pvc
+            EOF
 
             # Create MySQL service
             echo "Creating MySQL service..."
-            echo "apiVersion: v1
+            kubectl create -f - <<EOF
+            apiVersion: v1
             kind: Service
             metadata:
               name: mysql
@@ -168,11 +165,16 @@ jobs:
                 app: mysql
               ports:
                 - port: 3306
-              clusterIP: None" > kubernetes/mysql-service.yaml
+              clusterIP: None
+            EOF
+
+            echo "Waiting for MySQL to initialize..."
+            sleep 30  # Give MySQL some time to initialize
 
             # Create auth-service deployment
             echo "Creating auth-service deployment..."
-            echo "apiVersion: apps/v1
+            kubectl create -f - <<EOF
+            apiVersion: apps/v1
             kind: Deployment
             metadata:
               name: auth-service
@@ -193,9 +195,9 @@ jobs:
                         - containerPort: 8080
                       env:
                         - name: SPRING_PROFILES_ACTIVE
-                          value: \"prod\"
+                          value: "prod"
                         - name: SPRING_DATASOURCE_URL
-                          value: \"jdbc:mysql://mysql:3306/authdb?useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true\"
+                          value: "jdbc:mysql://mysql:3306/authdb?useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true"
                         - name: SPRING_DATASOURCE_USERNAME
                           valueFrom:
                             secretKeyRef:
@@ -213,11 +215,11 @@ jobs:
                               key: secret
                       resources:
                         limits:
-                          cpu: \"0.5\"
-                          memory: \"512Mi\"
+                          cpu: "0.5"
+                          memory: "512Mi"
                         requests:
-                          cpu: \"0.2\"
-                          memory: \"256Mi\"
+                          cpu: "0.2"
+                          memory: "256Mi"
                       readinessProbe:
                         httpGet:
                           path: /api/test/all
@@ -233,11 +235,13 @@ jobs:
                         initialDelaySeconds: 180
                         periodSeconds: 30
                         timeoutSeconds: 5
-                        failureThreshold: 3" > kubernetes/auth-service-deployment.yaml
+                        failureThreshold: 3
+            EOF
 
             # Create auth-service service
             echo "Creating auth-service service..."
-            echo "apiVersion: v1
+            kubectl create -f - <<EOF
+            apiVersion: v1
             kind: Service
             metadata:
               name: auth-service
@@ -247,22 +251,8 @@ jobs:
               ports:
                 - port: 80
                   targetPort: 8080
-              type: LoadBalancer" > kubernetes/auth-service-service.yaml
-
-            # Apply all the configurations
-            echo "Applying MySQL resources..."
-            kubectl apply -f kubernetes/mysql-secret.yaml
-            kubectl apply -f kubernetes/jwt-secret.yaml
-            kubectl apply -f kubernetes/mysql-pvc.yaml
-            kubectl apply -f kubernetes/mysql-deployment.yaml
-            kubectl apply -f kubernetes/mysql-service.yaml
-
-            echo "Waiting for MySQL to initialize..."
-            sleep 30  # Give MySQL some time to initialize
-
-            echo "Applying auth-service resources..."
-            kubectl apply -f kubernetes/auth-service-deployment.yaml
-            kubectl apply -f kubernetes/auth-service-service.yaml
+              type: LoadBalancer
+            EOF
           fi
 
           # Wait for the deployment to be ready
