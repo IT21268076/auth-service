@@ -1,3 +1,4 @@
+
 name: Build and Deploy to GKE
 
 on:
@@ -131,7 +132,22 @@ jobs:
           # Check if the deployment exists
           if kubectl get deployment auth-service &> /dev/null; then
             echo "Updating existing deployment..."
+          
+            # Update the image with a rolling update strategy
             kubectl set image deployment/auth-service auth-service=gcr.io/$PROJECT_ID/$IMAGE:$GITHUB_SHA
+          
+            # Check the rollout status with increased timeout and better error handling
+            echo "Checking rollout status..."
+            if ! kubectl rollout status deployment/auth-service --timeout=10m; then
+              echo "Rollout failed. Getting deployment events..."
+              kubectl describe deployment auth-service
+              echo "Getting pod events..."
+              kubectl get pods -l app=auth-service
+              kubectl describe pods -l app=auth-service
+              echo "Getting pod logs..."
+              kubectl logs -l app=auth-service --tail=100
+              exit 1
+            fi
           else
             echo "Creating new deployment..."
           
@@ -171,6 +187,8 @@ jobs:
               selector:
                 matchLabels:
                   app: mysql
+              strategy:
+                type: Recreate
               template:
                 metadata:
                   labels:
@@ -204,6 +222,19 @@ jobs:
                       volumeMounts:
                         - name: mysql-storage
                           mountPath: /var/lib/mysql
+                      readinessProbe:
+                        exec:
+                          command:
+                            - mysql
+                            - -h
+                            - localhost
+                            - -u
+                            - admin
+                            - -ppassword
+                            - -e
+                            - SELECT 1
+                        initialDelaySeconds: 30
+                        periodSeconds: 10
                   volumes:
                     - name: mysql-storage
                       persistentVolumeClaim:
@@ -224,8 +255,8 @@ jobs:
               clusterIP: None
             ')
           
-            echo "Waiting for MySQL to initialize..."
-            sleep 30
+            echo "Waiting for MySQL to be ready..."
+            kubectl wait --for=condition=ready pod -l app=mysql --timeout=5m
           
             echo "Creating auth-service deployment..."
             kubectl apply -f <(echo "
@@ -238,11 +269,20 @@ jobs:
               selector:
                 matchLabels:
                   app: auth-service
+              strategy:
+                type: RollingUpdate
+                rollingUpdate:
+                  maxSurge: 1
+                  maxUnavailable: 0
               template:
                 metadata:
                   labels:
                     app: auth-service
                 spec:
+                  initContainers:
+                    - name: wait-for-mysql
+                      image: busybox:1.31
+                      command: ['sh', '-c', 'until nc -z mysql 3306; do echo waiting for mysql; sleep 5; done;']
                   containers:
                     - name: auth-service
                       image: gcr.io/$PROJECT_ID/$IMAGE:$GITHUB_SHA
@@ -270,27 +310,38 @@ jobs:
                               key: secret
                       resources:
                         limits:
+                          cpu: \"1\"
+                          memory: \"1Gi\"
+                        requests:
                           cpu: \"0.5\"
                           memory: \"512Mi\"
-                        requests:
-                          cpu: \"0.2\"
-                          memory: \"256Mi\"
+                      startupProbe:
+                        httpGet:
+                          path: /api/test/all
+                          port: 8080
+                        initialDelaySeconds: 30
+                        periodSeconds: 10
+                        timeoutSeconds: 5
+                        failureThreshold: 30
+                        successThreshold: 1
                       readinessProbe:
                         httpGet:
                           path: /api/test/all
                           port: 8080
-                        initialDelaySeconds: 120
-                        periodSeconds: 15
+                        initialDelaySeconds: 0
+                        periodSeconds: 10
                         timeoutSeconds: 5
-                        failureThreshold: 5
+                        failureThreshold: 3
+                        successThreshold: 1
                       livenessProbe:
                         httpGet:
                           path: /api/test/all
                           port: 8080
-                        initialDelaySeconds: 180
+                        initialDelaySeconds: 0
                         periodSeconds: 30
                         timeoutSeconds: 5
                         failureThreshold: 3
+                        successThreshold: 1
             ")
           
             echo "Creating auth-service service..."
@@ -311,7 +362,14 @@ jobs:
           
           # Wait for the deployment to be ready
           echo "Waiting for deployment to be ready..."
-          kubectl rollout status deployment/auth-service --timeout=10m
+          if ! kubectl rollout status deployment/auth-service --timeout=10m; then
+            echo "Deployment failed. Getting debug information..."
+            kubectl describe deployment auth-service
+            kubectl get pods -l app=auth-service
+            kubectl describe pods -l app=auth-service
+            kubectl logs -l app=auth-service --tail=100
+            exit 1
+          fi
           
           # Get the service URL
           echo "Service is available at:"
