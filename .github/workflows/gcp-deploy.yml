@@ -147,12 +147,13 @@ jobs:
               type: RollingUpdate
               rollingUpdate:
                 maxSurge: 1
-                maxUnavailable: 0
+                maxUnavailable: 1
             template:
               metadata:
                 labels:
                   app: auth-service
               spec:
+                terminationGracePeriodSeconds: 30
                 containers:
                   - name: auth-service
                     image: gcr.io/$PROJECT_ID/$IMAGE:$GITHUB_SHA
@@ -196,6 +197,9 @@ jobs:
                         cpu: "0.2"
                         memory: "256Mi"
           EOF
+          
+            # Wait a moment for the deployment to register
+            sleep 5
           
             # Check the rollout status
             echo "Checking rollout status..."
@@ -320,12 +324,13 @@ jobs:
                 type: RollingUpdate
                 rollingUpdate:
                   maxSurge: 1
-                  maxUnavailable: 0
+                  maxUnavailable: 1
               template:
                 metadata:
                   labels:
                     app: auth-service
                 spec:
+                  terminationGracePeriodSeconds: 30
                   containers:
                     - name: auth-service
                       image: gcr.io/$PROJECT_ID/$IMAGE:$GITHUB_SHA
