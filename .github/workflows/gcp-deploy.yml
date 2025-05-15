@@ -228,7 +228,7 @@ jobs:
             sleep 45
           
             echo "Creating auth-service deployment..."
-            kubectl apply -f <(cat <<'EOFDEPLOY'
+            kubectl apply -f <(echo "
             apiVersion: apps/v1
             kind: Deployment
             metadata:
@@ -291,8 +291,7 @@ jobs:
                         periodSeconds: 30
                         timeoutSeconds: 5
                         failureThreshold: 3
-            EOFDEPLOY
-            ) | envsubst | kubectl apply -f -
+            ")
           
             echo "Creating auth-service service..."
             kubectl apply -f <(echo '
