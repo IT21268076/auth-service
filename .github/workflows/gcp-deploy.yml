@@ -225,7 +225,7 @@ jobs:
             ')
           
             echo "Waiting for MySQL to initialize..."
-            sleep 45
+            sleep 30
           
             echo "Creating auth-service deployment..."
             kubectl apply -f <(echo "
@@ -250,9 +250,9 @@ jobs:
                         - containerPort: 8080
                       env:
                         - name: SPRING_PROFILES_ACTIVE
-                          value: "prod"
+                          value: \"prod\"
                         - name: SPRING_DATASOURCE_URL
-                          value: "jdbc:mysql://mysql:3306/authdb?useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true"
+                          value: \"jdbc:mysql://mysql:3306/authdb?useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true\"
                         - name: SPRING_DATASOURCE_USERNAME
                           valueFrom:
                             secretKeyRef:
@@ -270,11 +270,11 @@ jobs:
                               key: secret
                       resources:
                         limits:
-                          cpu: "0.5"
-                          memory: "512Mi"
+                          cpu: \"0.5\"
+                          memory: \"512Mi\"
                         requests:
-                          cpu: "0.2"
-                          memory: "256Mi"
+                          cpu: \"0.2\"
+                          memory: \"256Mi\"
                       readinessProbe:
                         httpGet:
                           path: /api/test/all
