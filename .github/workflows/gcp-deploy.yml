@@ -72,25 +72,21 @@ jobs:
             kubectl set image deployment/auth-service auth-service=gcr.io/$PROJECT_ID/$IMAGE:$GITHUB_SHA
           else
             echo "Creating new deployment..."
-            # Create kubernetes directory if it doesn't exist
-            mkdir -p kubernetes
 
             # Create MySQL secret
             echo "Creating MySQL secret..."
             kubectl create secret generic mysql-credentials \
               --from-literal=username=admin \
-              --from-literal=password=password \
-              --dry-run=client -o yaml > kubernetes/mysql-secret.yaml
+              --from-literal=password=password || true
 
             # Create JWT secret
             echo "Creating JWT secret..."
             kubectl create secret generic jwt-secret \
-              --from-literal=secret="d63a385c672d1bfdd8084d4deccdcab94d2ad4e306dd34e0adc702d8a3a8c8c460107347bfc90c9c9b1516d589a48fec0c644d14aebfc80b0b1ca39b70d9da6b51723645748851e704faef3f7f5c436308aab23e76743459e50286d0bd15d3a55b3493076de42978ae58b1b43370382f4f259bad4b01d3b168c986f7ffc5f570" \
-              --dry-run=client -o yaml > kubernetes/jwt-secret.yaml
+              --from-literal=secret="d63a385c672d1bfdd8084d4deccdcab94d2ad4e306dd34e0adc702d8a3a8c8c460107347bfc90c9c9b1516d589a48fec0c644d14aebfc80b0b1ca39b70d9da6b51723645748851e704faef3f7f5c436308aab23e76743459e50286d0bd15d3a55b3493076de42978ae58b1b43370382f4f259bad4b01d3b168c986f7ffc5f570" || true
 
-            # Create MySQL PVC using kubectl
+            # Create all resources using kubectl with YAML strings
             echo "Creating MySQL PVC..."
-            kubectl create -f - <<EOF
+            kubectl apply -f <(echo '
             apiVersion: v1
             kind: PersistentVolumeClaim
             metadata:
@@ -101,11 +97,10 @@ jobs:
               resources:
                 requests:
                   storage: 5Gi
-            EOF
+            ')
 
-            # Create MySQL deployment
             echo "Creating MySQL deployment..."
-            kubectl create -f - <<EOF
+            kubectl apply -f <(echo '
             apiVersion: apps/v1
             kind: Deployment
             metadata:
@@ -151,11 +146,10 @@ jobs:
                     - name: mysql-storage
                       persistentVolumeClaim:
                         claimName: mysql-pvc
-            EOF
+            ')
 
-            # Create MySQL service
             echo "Creating MySQL service..."
-            kubectl create -f - <<EOF
+            kubectl apply -f <(echo '
             apiVersion: v1
             kind: Service
             metadata:
@@ -166,14 +160,13 @@ jobs:
               ports:
                 - port: 3306
               clusterIP: None
-            EOF
+            ')
 
             echo "Waiting for MySQL to initialize..."
-            sleep 30  # Give MySQL some time to initialize
+            sleep 30
 
-            # Create auth-service deployment
             echo "Creating auth-service deployment..."
-            kubectl create -f - <<EOF
+            kubectl apply -f <(echo "
             apiVersion: apps/v1
             kind: Deployment
             metadata:
@@ -195,9 +188,9 @@ jobs:
                         - containerPort: 8080
                       env:
                         - name: SPRING_PROFILES_ACTIVE
-                          value: "prod"
+                          value: \"prod\"
                         - name: SPRING_DATASOURCE_URL
-                          value: "jdbc:mysql://mysql:3306/authdb?useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true"
+                          value: \"jdbc:mysql://mysql:3306/authdb?useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true\"
                         - name: SPRING_DATASOURCE_USERNAME
                           valueFrom:
                             secretKeyRef:
@@ -215,11 +208,11 @@ jobs:
                               key: secret
                       resources:
                         limits:
-                          cpu: "0.5"
-                          memory: "512Mi"
+                          cpu: \"0.5\"
+                          memory: \"512Mi\"
                         requests:
-                          cpu: "0.2"
-                          memory: "256Mi"
+                          cpu: \"0.2\"
+                          memory: \"256Mi\"
                       readinessProbe:
                         httpGet:
                           path: /api/test/all
@@ -236,11 +229,10 @@ jobs:
                         periodSeconds: 30
                         timeoutSeconds: 5
                         failureThreshold: 3
-            EOF
+            ")
 
-            # Create auth-service service
             echo "Creating auth-service service..."
-            kubectl create -f - <<EOF
+            kubectl apply -f <(echo '
             apiVersion: v1
             kind: Service
             metadata:
@@ -252,7 +244,7 @@ jobs:
                 - port: 80
                   targetPort: 8080
               type: LoadBalancer
-            EOF
+            ')
           fi
 
           # Wait for the deployment to be ready
