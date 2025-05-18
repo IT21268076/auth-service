@@ -11,6 +11,13 @@ The Auth Service provides user authentication and authorization capabilities as 
 - Role-based access control
 - Secure user data management
 
+## Deployment checking
+
+- gcloud container images list
+- kubectl get pods
+- kubectl get services
+- kubectl describe deployment auth-service
+
 ## Architecture
 
 ![Architecture Diagram](architecture-diagram.png)
@@ -98,3 +105,4 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 [//]: # (7. Create a Simple Architecture Diagram)
 
 [//]: # (   You can create a simple architecture diagram to include in your documentation. Save it as architecture-diagram.png in the root directory.)
+
